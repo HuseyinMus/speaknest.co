@@ -91,4 +91,79 @@ export class RBACService {
 }
 
 // Singleton instance'ı dışa aktarma
-export const rbacService = RBACService.getInstance(); 
+export const rbacService = RBACService.getInstance();
+
+// Sayfa erişim izinleri
+export const PagePermissions = {
+  // Admin paneli
+  '/dashboard': [UserRole.ADMIN],
+  '/admin-panel': [UserRole.ADMIN],
+  
+  // Öğretmen paneli
+  '/teacher-panel': [UserRole.ADMIN, UserRole.TEACHER],
+  
+  // Pro kullanıcı paneli
+  '/prouser-panel': [UserRole.ADMIN, UserRole.PRO_USER],
+  
+  // Öğrenci paneli
+  '/student-panel': [UserRole.ADMIN, UserRole.TEACHER, UserRole.STUDENT, UserRole.PRO_USER],
+  '/student-panel/dashboard': [UserRole.ADMIN, UserRole.STUDENT, UserRole.PRO_USER],
+  '/student-panel/vocabulary': [UserRole.ADMIN, UserRole.STUDENT, UserRole.PRO_USER],
+  '/student-panel/sessions': [UserRole.ADMIN, UserRole.STUDENT, UserRole.PRO_USER],
+  '/student-panel/practice-rooms': [UserRole.ADMIN, UserRole.STUDENT, UserRole.PRO_USER],
+  '/student-panel/upcoming': [UserRole.ADMIN, UserRole.STUDENT, UserRole.PRO_USER],
+  '/student-panel/assignments': [UserRole.ADMIN, UserRole.STUDENT, UserRole.PRO_USER],
+  '/student-panel/profile': [UserRole.ADMIN, UserRole.STUDENT, UserRole.PRO_USER],
+  '/student-panel/statistics': [UserRole.ADMIN, UserRole.STUDENT, UserRole.PRO_USER],
+  '/student-panel/settings': [UserRole.ADMIN, UserRole.STUDENT, UserRole.PRO_USER],
+}
+
+export class RoleBasedAccess {
+  /**
+   * Kullanıcının belirli bir sayfaya erişim izninin olup olmadığını kontrol eder
+   */
+  public static hasPageAccess(path: string, userRole: UserRole): boolean {
+    const normalizedPath = this.normalizePath(path);
+    
+    // PagePermissions içinde tanımlı değilse herkes erişebilir
+    if (!PagePermissions[normalizedPath]) {
+      return true;
+    }
+    
+    // Tanımlı bir izin varsa, kullanıcının rolünün o izinler arasında olup olmadığını kontrol et
+    return PagePermissions[normalizedPath].includes(userRole);
+  }
+  
+  /**
+   * Yolu normalize eder (sonundaki / işaretini kaldırır)
+   */
+  private static normalizePath(path: string): string {
+    return path.endsWith('/') ? path.slice(0, -1) : path;
+  }
+  
+  /**
+   * Kullanıcının rolünü Firestore'dan alma
+   */
+  public static async getUserRole(user: User | null): Promise<UserRole> {
+    if (!user) return UserRole.GUEST;
+    
+    try {
+      const userDoc = await getDoc(doc(db, 'users', user.uid));
+      if (userDoc.exists() && userDoc.data().role) {
+        return userDoc.data().role as UserRole;
+      }
+      return UserRole.STUDENT; // Varsayılan rol artık STUDENT
+    } catch (error) {
+      console.error('Rol alınamadı:', error);
+      return UserRole.GUEST;
+    }
+  }
+}
+
+// Rol tabanlı erişim kontrolü için hook kullanımı örneği
+export function useRoleBasedAccess() {
+  return {
+    checkAccess: (path: string, userRole: UserRole) => RoleBasedAccess.hasPageAccess(path, userRole),
+    getUserRole: (user: User | null) => RoleBasedAccess.getUserRole(user),
+  };
+} 

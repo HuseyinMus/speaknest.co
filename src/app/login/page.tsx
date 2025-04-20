@@ -8,6 +8,7 @@ import { useRouter } from 'next/navigation';
 import { signInWithGoogle } from '@/lib/firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import Image from 'next/image';
+import { setAuthCookie } from '@/lib/auth/setCookie';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -42,6 +43,12 @@ export default function LoginPage() {
       if (userDoc.exists()) {
         const userData = userDoc.data();
         
+        // Auth cookie'sini ayarla
+        await setAuthCookie({
+          uid: user.uid,
+          role: userData.role || 'student',
+        });
+        
         if (userData.role === 'admin') {
           router.push('/dashboard');
         } else if (userData.role === 'teacher') {
@@ -54,6 +61,11 @@ export default function LoginPage() {
         }
       } else {
         // Kullanıcı verisi yoksa öğrenci olarak kabul et
+        await setAuthCookie({
+          uid: user.uid,
+          role: 'student',
+        });
+        
         router.push('/student-panel');
       }
     } catch (error) {

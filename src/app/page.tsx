@@ -7,8 +7,10 @@ import { auth, db } from '@/lib/firebase/config';
 import { doc, getDoc } from 'firebase/firestore';
 import { signOut } from 'firebase/auth';
 import Header from '@/components/Header';
+import { useLanguage } from '@/lib/context/LanguageContext';
 
 export default function Home() {
+  const { t } = useLanguage();
   const [user, setUser] = useState<any>(null);
   const [userProfile, setUserProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -94,13 +96,13 @@ export default function Home() {
             onClick={() => router.push('/login')} 
             className="bg-green-600 hover:bg-green-700 text-white rounded-md px-4 py-2 transition-colors"
           >
-            Giriş Yap
+            {t('login')}
           </button>
           <button 
             onClick={() => router.push('/register')} 
             className="bg-white hover:bg-gray-100 text-green-700 border border-green-700 rounded-md px-4 py-2 transition-colors ml-3"
           >
-            Kayıt Ol
+            {t('register')}
           </button>
         </>
       );
@@ -110,7 +112,7 @@ export default function Home() {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="text-xl">Yükleniyor...</div>
+        <div className="text-xl">{t('loading')}</div>
       </div>
     );
   }
@@ -142,7 +144,7 @@ export default function Home() {
                 href="/register"
                 className="px-6 py-3 bg-green-600 text-white rounded-lg shadow hover:bg-green-700 transition-colors text-lg"
               >
-                Ücretsiz Deneme Dersi Al
+                {t('register')}
               </Link>
             )}
           </div>
@@ -207,7 +209,7 @@ export default function Home() {
                 </svg>
               </div>
               <div className="p-6">
-                <h3 className="text-xl font-bold mb-2 text-gray-800">Başlangıç Paketi</h3>
+                <h3 className="text-xl font-bold mb-2 text-gray-800">{t('beginnerLevel')}</h3>
                 <p className="text-gray-600 mb-4">Temel İngilizce konuşma becerileri, günlük konuşmalar ve pratik dersler</p>
                 <Link href="/pricing" className="text-green-600 hover:underline font-medium">
                   Fiyatlandırmayı İncele →

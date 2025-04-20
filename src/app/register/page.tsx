@@ -7,6 +7,7 @@ import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { useRouter } from 'next/navigation';
 import { signInWithGoogle } from '@/lib/firebase/auth';
+import { setAuthCookie } from '@/lib/auth/setCookie';
 
 const Register = () => {
   const [firstName, setFirstName] = useState('');
@@ -43,6 +44,12 @@ const Register = () => {
       if (userDoc.exists()) {
         const userData = userDoc.data();
         
+        // Auth cookie'sini ayarla
+        await setAuthCookie({
+          uid: user.uid,
+          role: userData.role || 'student',
+        });
+        
         if (userData.role === 'admin') {
           router.push('/dashboard');
         } else if (userData.role === 'teacher') {
@@ -55,6 +62,11 @@ const Register = () => {
         }
       } else {
         // Kullanıcı verisi yoksa öğrenci olarak kabul et
+        await setAuthCookie({
+          uid: user.uid,
+          role: 'student',
+        });
+        
         router.push('/student-panel');
       }
     } catch (error) {
@@ -88,6 +100,12 @@ const Register = () => {
         role: 'student',  // Varsayılan olarak student rolü
         createdAt: new Date(),
         updatedAt: new Date()
+      });
+      
+      // Auth cookie'yi ayarla
+      await setAuthCookie({
+        uid: userCredential.user.uid,
+        role: 'student',
       });
       
       // Yönlendirme yap (öğrenci paneli)

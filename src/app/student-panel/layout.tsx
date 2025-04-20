@@ -4,8 +4,9 @@ import { useState, useEffect } from 'react';
 import { auth } from '@/lib/firebase/config';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
-import { Menu, X, Home, MessageCircle, Users, FileText, User, BarChart, Clock, Settings, LogOut, BookOpen } from 'lucide-react';
+import { Menu, X, Home, MessageCircle, Users, FileText, User, BarChart, Clock, Settings, LogOut, BookOpen, AlertTriangle } from 'lucide-react';
 import { useLanguage } from '@/lib/context/LanguageContext';
+import { RoleBasedAccess, UserRole, PagePermissions } from '@/lib/auth/rbac';
 
 // Kullanıcı profili interface'i
 interface UserProfile {
@@ -19,7 +20,7 @@ interface UserProfile {
   lastName?: string;
 }
 
-export default function StudentPanel() {
+export default function StudentLayout({ children }: { children: React.ReactNode }) {
   const { t } = useLanguage();
   const router = useRouter();
   
@@ -27,15 +28,30 @@ export default function StudentPanel() {
   const [loading, setLoading] = useState(true);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [error, setError] = useState('');
+  const [accessDenied, setAccessDenied] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [userRole, setUserRole] = useState<UserRole>(UserRole.STUDENT);
   
   useEffect(() => {
     const checkAuth = async () => {
       try {
         const unsubscribe = auth.onAuthStateChanged(async (user) => {
           if (user) {
-            setUserProfile(user.toJSON());
+            // @ts-ignore: user.toJSON() metodu TypeScript'te tanımlı değil ama çalışıyor
+            setUserProfile(user.toJSON ? user.toJSON() : user);
+            
+            // Kullanıcının rolünü al
+            const role = await RoleBasedAccess.getUserRole(user);
+            setUserRole(role);
+            
+            // Mevcut sayfaya erişim izni var mı kontrol et
+            const path = window.location.pathname;
+            const hasAccess = RoleBasedAccess.hasPageAccess(path, role);
+            
+            if (!hasAccess) {
+              setAccessDenied(true);
+            }
           } else {
             // Kullanıcı giriş yapmamışsa login sayfasına yönlendir
             router.push('/login');
@@ -57,7 +73,7 @@ export default function StudentPanel() {
   const handleLogout = async () => {
     try {
       // Önce tüm Firebase işlemlerini temizle
-      window.speechSynthesis.cancel(); // Varsa ses çalmayı durdur
+      window.speechSynthesis?.cancel(); // Varsa ses çalmayı durdur
       
       // Çıkış işlemini gerçekleştir
       await auth.signOut();
@@ -89,6 +105,11 @@ export default function StudentPanel() {
     setActiveTab(currentPath);
   }, []);
 
+  // Sadece kullanıcının erişim yetkisi olan menü öğelerini filtrele
+  const filteredMenuItems = menuItems.filter(item => 
+    RoleBasedAccess.hasPageAccess(item.url, userRole)
+  );
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
@@ -112,6 +133,34 @@ export default function StudentPanel() {
           >
             Giriş Sayfasına Dön
           </button>
+        </div>
+      </div>
+    );
+  }
+  
+  if (accessDenied) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="bg-white border border-slate-200 text-slate-700 px-6 py-5 rounded-lg max-w-md shadow-sm">
+          <div className="flex items-center space-x-3 mb-4">
+            <AlertTriangle className="text-red-500" size={24} />
+            <h2 className="text-lg font-semibold text-red-600">Erişim Reddedildi</h2>
+          </div>
+          <p className="text-slate-600 mb-3">Bu sayfaya erişim yetkiniz bulunmuyor. Lütfen uygun yetkilere sahip bir hesapla giriş yapın veya ana sayfaya dönün.</p>
+          <div className="flex space-x-3">
+            <button 
+              onClick={() => router.push('/')}
+              className="mt-2 flex-1 py-2 px-4 rounded-md bg-slate-600 text-white font-medium hover:bg-slate-700 transition-colors"
+            >
+              Ana Sayfaya Dön
+            </button>
+            <button 
+              onClick={handleLogout}
+              className="mt-2 flex-1 py-2 px-4 rounded-md bg-red-600 text-white font-medium hover:bg-red-700 transition-colors"
+            >
+              Çıkış Yap
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -159,7 +208,7 @@ export default function StudentPanel() {
               <div className="text-sm font-medium text-slate-800 truncate max-w-[150px]">
                 {userProfile?.displayName || userProfile?.firstName || t('student')}
               </div>
-              <div className="text-xs text-slate-500">{userProfile?.role || t('student')}</div>
+              <div className="text-xs text-slate-500">{userProfile?.role || userRole}</div>
             </div>
           </div>
           <button 
@@ -173,7 +222,7 @@ export default function StudentPanel() {
         {/* Menü öğeleri */}
         <div className="flex-1 overflow-y-auto p-3">
           <nav className="space-y-1">
-            {menuItems.map((item) => (
+            {filteredMenuItems.map((item) => (
               <button
                 key={item.id}
                 onClick={() => {
@@ -210,9 +259,9 @@ export default function StudentPanel() {
       </div>
       
       {/* Ana içerik alanı - sayfalar buraya dynamik olarak yüklenecek */}
-      <div className="flex-1 p-4 md:p-6">
-        {/* Her sayfa için içerik şimdi kendi sayfasında olacak */}
+      <div className="flex-1 p-4 md:p-6 overflow-auto">
+        {children}
       </div>
     </div>
   );
-}
+} 
