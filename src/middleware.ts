@@ -2,6 +2,10 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { cookies } from 'next/headers';
 import { UserRole, PagePermissions } from '@/lib/auth/rbac';
+import crypto from 'crypto';
+
+// Güvenlik anahtarı - cookie/route.ts ile aynı değer olmalı
+const SECRET_KEY = process.env.COOKIE_SECRET_KEY || 'default-secret-key-change-in-production';
 
 // Giriş yapmadan erişilebilecek sayfalar
 const publicPages = [
@@ -24,6 +28,54 @@ function normalizePath(path: string): string {
   return cleanPath.endsWith('/') && cleanPath !== '/' 
     ? cleanPath.slice(0, -1) 
     : cleanPath;
+}
+
+// İmzanın doğruluğunu kontrol etmek için yardımcı fonksiyon
+function verifySignature(signedValue: string): string | null {
+  const [value, signature] = signedValue.split('.');
+  
+  if (!value || !signature) {
+    return null;
+  }
+  
+  const hmac = crypto.createHmac('sha256', SECRET_KEY);
+  hmac.update(value);
+  const expectedSignature = hmac.digest('base64');
+  
+  if (signature !== expectedSignature) {
+    return null;
+  }
+  
+  return value;
+}
+
+// Kimlik doğrulama cookie'sinden kullanıcı bilgilerini alma
+function getUserDataFromCookie(cookieValue: string): { uid: string, role: string } | null {
+  try {
+    // İmzayı doğrula
+    const verifiedValue = verifySignature(cookieValue);
+    
+    if (!verifiedValue) {
+      console.error('Cookie imzası doğrulanamadı');
+      return null;
+    }
+    
+    // Base64 kodunu çöz
+    const decodedValue = Buffer.from(verifiedValue, 'base64').toString('utf-8');
+    
+    // JSON verisini ayrıştır
+    const userData = JSON.parse(decodedValue);
+    
+    if (!userData || !userData.uid || !userData.role) {
+      console.error('Geçersiz kullanıcı verisi');
+      return null;
+    }
+    
+    return userData;
+  } catch (error) {
+    console.error('Cookie ayrıştırma hatası:', error);
+    return null;
+  }
 }
 
 // Kullanıcının sayfaya erişim izni var mı kontrol et
@@ -60,17 +112,26 @@ export function middleware(request: NextRequest) {
 
   // Auth cookie'sini kontrol et
   const authCookie = request.cookies.get('auth');
-  const userRole = authCookie ? JSON.parse(decodeURIComponent(authCookie.value)).role : null;
-
-  // Kullanıcı giriş yapmamışsa login sayfasına yönlendir
+  
   if (!authCookie) {
+    // Kullanıcı giriş yapmamışsa login sayfasına yönlendir
     const loginUrl = new URL('/login', request.url);
     loginUrl.searchParams.set('callbackUrl', encodeURIComponent(request.url));
     return NextResponse.redirect(loginUrl);
   }
-
+  
+  // Cookie'den kullanıcı verisini al
+  const userData = getUserDataFromCookie(authCookie.value);
+  
+  if (!userData) {
+    // Geçersiz cookie - kullanıcıyı yeniden giriş yapmaya zorla
+    const loginUrl = new URL('/login', request.url);
+    loginUrl.searchParams.set('callbackUrl', encodeURIComponent(request.url));
+    return NextResponse.redirect(loginUrl);
+  }
+  
   // Kullanıcı rolünü kontrol et
-  if (!hasAccess(normalizedPath, userRole)) {
+  if (!hasAccess(normalizedPath, userData.role)) {
     // Erişim reddedildi sayfasına yönlendir
     return NextResponse.redirect(new URL('/access-denied', request.url));
   }
