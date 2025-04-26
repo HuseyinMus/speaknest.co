@@ -8,6 +8,7 @@ import { doc, getDoc } from 'firebase/firestore';
 import { signOut } from 'firebase/auth';
 import Header from '@/components/Header';
 import { useLanguage } from '@/lib/context/LanguageContext';
+import { setAuthCookie } from '@/lib/firebase/auth';
 
 export default function Home() {
   const { t } = useLanguage();
@@ -55,15 +56,40 @@ export default function Home() {
     }
   };
   
-  const navigateToUserPanel = (userProfile) => {
-    if (userProfile.role === 'admin') {
-      router.push('/dashboard');
-    } else if (userProfile.role === 'teacher') {
-      router.push('/teacher-panel');
-    } else if (userProfile.role === 'proUser') {
-      router.push('/prouser-panel');
-    } else {
-      router.push('/student-panel');
+  const navigateToUserPanel = async (userProfile) => {
+    if (!userProfile) return;
+    
+    let redirectPath = '/';
+    switch (userProfile.role) {
+      case 'admin':
+        redirectPath = '/admin-panel';
+        break;
+      case 'teacher':
+        redirectPath = '/teacher-panel';
+        break;
+      case 'proUser':
+        redirectPath = '/prouser-panel';
+        break;
+      case 'student':
+        redirectPath = '/student-panel/dashboard';
+        break;
+      default:
+        redirectPath = '/';
+    }
+    
+    try {
+      // Auth cookie'yi ayarla
+      await setAuthCookie({
+        uid: userProfile.uid,
+        role: userProfile.role
+      });
+      
+      // Cookie ayarlandıktan sonra yönlendir
+      window.location.href = redirectPath;
+    } catch (error) {
+      console.error('Cookie ayarlanırken hata:', error);
+      // Hata durumunda da yönlendir
+      window.location.href = redirectPath;
     }
   };
   
@@ -112,7 +138,7 @@ export default function Home() {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="text-xl">{t('loading')}</div>
+        <div className="text-xl">Yükleniyor...</div>
       </div>
     );
   }
